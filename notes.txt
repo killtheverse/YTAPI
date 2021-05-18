@@ -1,0 +1,1 @@
+- Use PyJWT-1.7.1 instead of latest version. Latest version has a bug.

@@ -22,7 +22,7 @@ def logout_view(request):
     serializer = LogoutSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     serializer.save()
-
+    auth.logout(request)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

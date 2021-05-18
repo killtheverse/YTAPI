@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.contrib import auth
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
+import requests
 
 
 class LoginSerializer(serializers.ModelSerializer):
@@ -25,10 +26,15 @@ class LoginSerializer(serializers.ModelSerializer):
         fields = ['username', 'password', 'tokens']
     
     def validate(self, attrs):
-        username = attrs.get('username', '')
-        password = attrs.get('password', '')
-        print('Username:', username)
-        print('Password:', password)
+        username = attrs.get('username', None)
+        password = attrs.get('password', None)
+
+        if username is None:
+            raise serializers.ValidationError("Username is required to login")
+        
+        if password is None:
+            raise serializers.ValidationError("A password is required to login")
+        
         user = auth.authenticate(username=username, password=password)
         
         if not user:
@@ -52,8 +58,16 @@ class LogoutSerializer(serializers.Serializer):
         return attrs
 
     def save(self, **kwargs):
-        try:
-            refresh = RefreshToken(self.token)
-            refresh.blacklist()
-        except:
-            self.fail('bad_token')
+        # try:
+            
+        data = {
+            'refresh': self.token
+        }
+        r = requests.post('http://127.0.0.1:8000/auth/token/refresh/', data)
+        print(r)
+
+        refresh = RefreshToken(self.token)
+        refresh.blacklist()
+
+        # except:
+        #     self.fail('bad_token')

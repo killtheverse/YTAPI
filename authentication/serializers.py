@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib import auth
+from .authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
-import requests
+from .models import JWTAccessToken
 
 
 class LoginSerializer(serializers.ModelSerializer):
@@ -34,11 +35,6 @@ class LoginSerializer(serializers.ModelSerializer):
         
         if password is None:
             raise serializers.ValidationError("A password is required to login")
-        
-        user = auth.authenticate(username=username, password=password)
-        
-        if not user:
-            raise AuthenticationFailed('Invalid credentials, try again')
 
         return {
             'username': username,
@@ -46,28 +42,3 @@ class LoginSerializer(serializers.ModelSerializer):
         }
 
 
-class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField()
-
-    default_error_message = {
-        'bad_token': ('Token is expired or invalid')
-    }
-
-    def validate(self, attrs):
-        self.token = attrs['refresh']
-        return attrs
-
-    def save(self, **kwargs):
-        # try:
-            
-        data = {
-            'refresh': self.token
-        }
-        r = requests.post('http://127.0.0.1:8000/auth/token/refresh/', data)
-        print(r)
-
-        refresh = RefreshToken(self.token)
-        refresh.blacklist()
-
-        # except:
-        #     self.fail('bad_token')

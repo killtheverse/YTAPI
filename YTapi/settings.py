@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
@@ -141,3 +142,14 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENs': False, 
     'BLACKLIST_AFTER_ROTATION': False,
 }
+
+YOUTUBE_API_KEY = "AIzaSyA4hrDxm1hMLQmpyxz3KCm6i13UgWWfjGE"
+
+
+# CELERY STUFF
+BROKER_URL = 'pyamqp://guest@localhost//'
+CELERY_RESULT_BACKEND = 'rpc://'
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Europe/Oslo'

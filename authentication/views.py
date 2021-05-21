@@ -3,11 +3,14 @@ from authentication.serializers import LoginSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import authentication, status
+from rest_framework import authentication, serializers, status
 from .authentication import JWTAuthentication
 from django.http import JsonResponse
-from .models import JWTAccessToken
+from .models import BlacklistedAccessToken, BlackListedRefreshToken
+from .serializers import RegisterUserSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
+from django.conf import settings
 
 
 @api_view(['POST'])
@@ -36,14 +39,30 @@ def logout_view(request):
         return Response({"Message": "Invalid access token"}, status=status.HTTP_400_BAD_REQUEST)
         
     try:
-        JWTAccessToken.objects.create(token=access_token)
-        token = request.POST['refresh']
-        refresh = RefreshToken(token)
-        refresh.blacklist()
-    except:
+        BlacklistedAccessToken.objects.create(token=access_token)
+        refresh_token = request.POST['refresh']
+        BlackListedRefreshToken.objects.create(token=refresh_token)
+    except Exception as e:
+        print("Exception:", e)
         return Response({"Message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"Message": "Logged out"}, status=status.HTTP_204_NO_CONTENT)
 
 
+@api_view(['POST'])
+def register_user(request):
+    serializer = RegisterUserSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"Message": "Created user"}, status=status.HTTP_201_CREATED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+def get_user_from_token(access_token):
+    payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])
+    User = get_user_model()
+    user = User.objects.filter(id=payload['user_id']).first()
+    return user
     
+

@@ -1,9 +1,10 @@
 from django.urls import path
 from .views import (
-    greeter, hello
+    greeter, post_query, get_query_results
 )
 
 urlpatterns = [
     path('greet/', greeter),
-    path('hello/', hello)    
+    path('post_query/', post_query),
+    path('get_query_results/', get_query_results),    
 ]

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -41,7 +42,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     'rest_framework',
-    'rest_framework_simplejwt.token_blacklist',
     
     'authentication',
     'api',
@@ -85,7 +85,7 @@ WSGI_APPLICATION = 'YTapi.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'djongo',
         'NAME': 'mydatabase',
     }
 }
@@ -146,10 +146,16 @@ SIMPLE_JWT = {
 YOUTUBE_API_KEY = "AIzaSyA4hrDxm1hMLQmpyxz3KCm6i13UgWWfjGE"
 
 
-# CELERY STUFF
-BROKER_URL = 'pyamqp://guest@localhost//'
-CELERY_RESULT_BACKEND = 'rpc://'
-CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'Europe/Oslo'
+CELERY_BROKER_URL = 'amqp://localhost'
+CELERY_BEAT_SCHEDULE  = {
+    'fetch_videos_every_minute': {
+        'task': 'fetch_videos',
+        'schedule': crontab(),
+    }
+}
+CELERY_RESULT_BACKEND = "mongodb"
+CELERY_MONGODB_BACKEND_SETTINGS = {
+    "host": "127.0.0.1",
+    "port": 27017,
+    "database": "mydatabase",
+}

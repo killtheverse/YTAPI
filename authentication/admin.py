@@ -1,4 +1,5 @@
 from django.contrib import admin
-from .models import JWTAccessToken
+from .models import BlackListedRefreshToken, BlacklistedAccessToken
 
-admin.site.register(JWTAccessToken)
+admin.site.register(BlacklistedAccessToken)
+admin.site.register(BlackListedRefreshToken)

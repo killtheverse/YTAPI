@@ -1,17 +1,25 @@
+from datetime import datetime
+from os import stat
 import jwt
 from authentication.serializers import LoginSerializer
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import serializers, status
 from .authentication import JWTAuthentication
 from django.http import JsonResponse
 from .models import BlackListedAccessToken, BlackListedRefreshToken
-from .serializers import RegisterUserSerializer
+from .serializers import RegisterUserSerializer, UpdateUserSerializer, ChangePasswordSerializer
 from bson.objectid import ObjectId
 from django.conf import settings
 from django.utils import timezone
 from .models import User
+from api.models import UserQuery
 
+
+def get_user_from_token(access_token):
+    payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])
+    user = User.objects.get({'_id': ObjectId(payload['user_id'])})
+    return user
 
 
 @api_view(['POST'])
@@ -24,9 +32,10 @@ def login_view(request):
     user = JWTAuthentication.authenticate(request, username=username, password=password)
     if user == None:
         return Response({"Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+    user.last_login = datetime.now()
+    user.save()
     return Response(serializer.data, status=status.HTTP_200_OK)
     
-
 
 @api_view(['POST'])
 def logout_view(request):
@@ -64,15 +73,66 @@ def register_user(request):
     serializer = RegisterUserSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
-        return Response({"Message": "Created user"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['POST'])
+def update_user(request):
+    authorization_header = request.headers.get('Authorization')
+    access_token = authorization_header.split(' ')[1]
+    user = get_user_from_token(access_token)
+    serializer = UpdateUserSerializer(user, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-def get_user_from_token(access_token):
-    payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])
-    user = User.objects.get({'_id': ObjectId(payload['user_id'])})
-    return user
+
+@api_view(['POST'])
+def change_password(request):
+    authorization_header = request.headers.get('Authorization')
+    access_token = authorization_header.split(' ')[1]
+    user = get_user_from_token(access_token)
+    serializer = ChangePasswordSerializer(user, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"Messaeg": "Changed password"}, status=status.HTTP_200_OK)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+def delete_user(request):
+    authorization_header = request.headers.get('Authorization')
+    access_token = authorization_header.split(' ')[1]
+    user = get_user_from_token(access_token)
+
+    user_obj_id = ObjectId(user._id)
+    if UserQuery.objects.raw({'user': user_obj_id}).count()>0:
+        user_queries = UserQuery.objects.raw({'user': user_obj_id})
+        for query in user_queries:
+            query.delete()
+
+    user.delete()
+    try:
+        blacklist_access_token = BlackListedAccessToken(
+            token=access_token,
+            exp_time=timezone.now()
+        )
+        blacklist_access_token.save()
+        
+        refresh_token = request.POST['refresh']
+        blacklist_refresh_token = BlackListedRefreshToken(
+            token=refresh_token,
+            exp_time=timezone.now()
+        )
+        blacklist_refresh_token.save()
+
+    except Exception as e:
+        print("Exception:", e)
+        return Response({"Message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"Message": "User deleted"}, status=status.HTTP_204_NO_CONTENT)
     
-

@@ -10,7 +10,7 @@ from authentication.views import get_user_from_token
 class VideoSerializer(serializers.Serializer):
     video_id = serializers.CharField()
     video_title = serializers.CharField()
-    video_description = serializers.CharField(required=False)
+    video_description = serializers.CharField(allow_blank=True)
     channel_title = serializers.CharField()
     channel_id = serializers.CharField()
     publish_time = serializers.DateTimeField()
@@ -18,6 +18,8 @@ class VideoSerializer(serializers.Serializer):
     time_updated = serializers.DateTimeField(required=False)
 
     def validate(self, attrs):
+        if len(attrs['video_description']) == 0:
+            attrs['video_description'] = '-'
         if len(attrs['video_title']) > 200:
             attrs['video_title'] = attrs['video_title'][:200]
         if len(attrs['video_description']) > 500:
@@ -31,7 +33,7 @@ class VideoSerializer(serializers.Serializer):
         video = YTVideo(
             video_id = validated_data['video_id'],
             video_title = validated_data['video_title'],
-            video_description = validated_data.get('video_description', ''),
+            video_description = validated_data['video_description'],
             channel_title = validated_data['channel_title'],
             channel_id = validated_data['channel_id'],
             publish_time = validated_data['publish_time'],

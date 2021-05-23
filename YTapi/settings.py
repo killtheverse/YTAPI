@@ -153,7 +153,7 @@ CELERY_BROKER_URL = 'amqp://localhost'
 CELERY_BEAT_SCHEDULE  = {
     'fetch_videos_every_minute': {
         'task': 'fetch_videos',
-        'schedule': crontab(),
+        'schedule': crontab('*/5'),
     }
 }
 CELERY_RESULT_BACKEND = "mongodb"

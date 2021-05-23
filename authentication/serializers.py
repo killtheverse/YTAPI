@@ -1,3 +1,4 @@
+from os import write
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
@@ -70,7 +71,64 @@ class RegisterUserSerializer(serializers.Serializer):
             last_name=validated_data['last_name'],
             password=validated_data['password'],
             account_created = timezone.now(),
+            account_modified = timezone.now(),
         )
         user.save()
         return user
     
+
+class UpdateUserSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    username = serializers.CharField(required=False)
+    first_name = serializers.CharField(required=False)
+    last_name = serializers.CharField(required=False)
+
+    def validate(self, attrs):
+        if attrs.get('email', None) != None:
+            if User.objects.raw({'email': attrs['email']}).count()>0:
+                raise serializers.ValidationError({"email": "Email is already associated with an account"})
+        if attrs.get('username', None) != None:
+            if User.objects.raw({'username': attrs['username']}).count()>0:
+                raise serializers.ValidationError({"username": "Username is already associated with an account"})
+        
+        if attrs.get('first_name', None) != None:
+            if len(attrs.get('first_name', None))==0 or len(attrs.get('first_name', None))>100:
+                raise serializers.ValidationError({"first_name": "First name too long"})
+        
+        if attrs.get('last_name', None) != None:
+            if len(attrs.get('last_name', None))==0 or len(attrs.get('last_name', None))>100:
+                raise serializers.ValidationError({"last_name": "Last name too long"})
+        return attrs
+
+    
+    def update(self, instance, validated_data):
+        instance.email = validated_data.get('email', instance.email)
+        instance.username = validated_data.get('username', instance.username)
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.account_modified = timezone.now()
+        instance.save()
+        return instance
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password1 = serializers.CharField(write_only=True, required=True)
+    new_password2 = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        if attrs['new_password1'] != attrs['new_password2']:
+            raise serializers.ValidationError({"new_password2": "Passwords don't match"})
+        
+        if attrs['new_password1'] == attrs['old_password']:
+            raise serializers.ValidationError({'new_password1': "New password can't be same as old password"})
+    
+        fernet = Fernet(settings.PASSWORD_ENCRYPTION_KEY)
+        encrypted_password = fernet.encrypt(attrs['new_password1'].encode())
+        attrs['new_password1'] = encrypted_password.decode("utf-8")
+        return attrs
+
+    def update(self, instance, validated_data):
+        instance.password = validated_data['new_password1']
+        instance.save()
+        return instance

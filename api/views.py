@@ -1,24 +1,16 @@
-from re import search
-from django.db import models
 from pymongo import DESCENDING
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import serializers, status
+from rest_framework import status
 from django.conf import settings
 from .models import (
     SearchQuery, UserQuery, YTVideo
 )
-from pymodm.queryset import QuerySet
 from .serializers import VideoSerializer
-from datetime import datetime
 from django.utils import timezone
-from django.contrib.auth import get_user_model
 from authentication.views import get_user_from_token
-import requests
-
-@api_view(['GET'])
-def greeter(request):
-    return Response("Hello world")
+from .tasks import fetch_single_video
+from bson import ObjectId
 
 
 @api_view(['POST'])
@@ -34,12 +26,18 @@ def post_query(request):
         authorization_header = request.headers.get('Authorization')
         access_token = authorization_header.split(' ')[1]
         user = get_user_from_token(access_token)
-        user_query = UserQuery(
-            user = user,
-            query = query,
-            time_created = timezone.now()
-        )
-        user_query.save()
+        
+        user_obj_id = ObjectId(user._id)
+        query_obj = UserQuery.objects.raw({'user': user_obj_id, 'query': query})
+        if query_obj.count() == 0:
+            user_query = UserQuery(
+                user = user,
+                query = query,
+                time_created = timezone.now()
+            )
+            user_query.save()
+        
+        fetch_single_video.delay(query)
         return Response({"Message": "Query stored"}, status=status.HTTP_201_CREATED)
     except Exception as e:
         return Response({"Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -56,6 +54,13 @@ def get_query_results(request):
     if number > 20 or number<=0:
         return Response({"Message": "Number should be between 1 and 20"}, status=status.HTTP_400_BAD_REQUEST)
     
+    authorization_header = request.headers.get('Authorization')
+    access_token = authorization_header.split(' ')[1]
+    user = get_user_from_token(access_token)
+    user_object_id = ObjectId(user._id)
+    if UserQuery.objects.raw({'query': query, 'user': user_object_id}).count()==0:
+        return Response({"Message": "Query not found"}, status=status.HTTP_404_NOT_FOUND)
+
     try:
         search_query = SearchQuery.objects.get({'query': query})
     except:
@@ -75,68 +80,31 @@ def get_query_results(request):
         data['Message'] = "No video found"
     return Response(data, status=status.HTTP_200_OK)
 
-@api_view(['GET'])
-def update_videos(request):
-    search_url = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        'part': 'snippet',
-        'maxResults': 20,
-        'type': 'video',
-        'order': 'date',
-        'key': settings.YOUTUBE_API_KEY,
-    }
 
-    user_queries = UserQuery.objects.all()
-    for query in user_queries:
-        params['q'] = query.query
-        r = requests.get(search_url, params=params).json()
-        results = r['items']
-        video_objs = []
-        for result in results:
-            video_data = {}
-            video_data['video_id'] = result['id']['videoId']
-            video_data['publish_time'] = datetime.strptime(result['snippet']['publishTime'], '%Y-%m-%dT%H:%M:%SZ')
-            video_data['channel_title'] = result['snippet']['channelTitle']
-            video_data['channel_id'] = result['snippet']['channelId']
-            video_data['video_title'] = result['snippet']['title']
-            video_data['video_description'] = result['snippet']['description']
-            
-            if YTVideo.objects.raw({'video_id': video_data['video_id']}).count()==0:
-                print("creating")
-                serializer = VideoSerializer(data=video_data)
-                if serializer.is_valid():
-                    video = serializer.save()
-                    video_objs.append(video)
-                else:
-                    print(serializer.errors)
-                    print(video_data)
-            else:
-                print("updating")
-                video = YTVideo.objects.get({'video_id': video_data['video_id']})
-                serializer = VideoSerializer(video, data=video_data)
-                if serializer.is_valid():
-                    video = serializer.save()
-                    video_objs.append(video)
-                else:
-                    print(serializer.errors)
-                    print(video_data)
-                    
-        search_queries = SearchQuery.objects.raw({'query': query.query})
-        print(len(video_objs))
-        if search_queries.count()==0:
-            print("=======================================")
-            print("new query")
-            search_query = SearchQuery(
-                query = query.query,
-                time_created = timezone.now(),
-                time_updated = timezone.now(),
-                videos = video_objs
-            )
-            search_query.save()
-        else:
-            print("updating query")
-            search_query = search_queries.first()
-            search_query.time_updated = timezone.now()
-            search_query.videos = video_objs
-            search_query.save()
-    return Response("OK")
+@api_view(['GET'])
+def get_user_queries(request):
+    authorization_header = request.headers.get('Authorization')
+    access_token = authorization_header.split(' ')[1]
+    user = get_user_from_token(access_token)
+
+    user_obj_id = ObjectId(user._id)
+    if UserQuery.objects.raw({'user': user_obj_id}).count()>0:
+        user_queries = [query.query for query in list(UserQuery.objects.raw({'user': user_obj_id}))]
+        return Response({"queries": user_queries}, status=status.HTTP_200_OK)
+    else:
+        return Response({"Message": "No queries associated with the user"}, status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+def delete_query(request):
+    authorization_header = request.headers.get('Authorization')
+    access_token = authorization_header.split(' ')[1]
+    user = get_user_from_token(access_token)
+    query = request.POST['query']
+    user_obj_id = ObjectId(user._id)
+    try:
+        user_query = UserQuery.objects.get({'user': user_obj_id, 'query': query})
+        user_query.delete()
+        return Response({"Message": "Deleted query"}, status=status.HTTP_200_OK)
+    except:
+        return Response({"Message": "Query not found"}, status=status.HTTP_404_NOT_FOUND)

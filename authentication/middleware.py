@@ -6,7 +6,10 @@ import jwt
 
 AUTHORIZED_URLS = [
     'api/',
-    'auth/logout/'
+    'auth/logout/',
+    'auth/update/',
+    'auth/change_password/',
+    'auth/delete_user/'
 ]
 
 

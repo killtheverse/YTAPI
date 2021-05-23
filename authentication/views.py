@@ -1,16 +1,17 @@
 import jwt
 from authentication.serializers import LoginSerializer
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import authentication, serializers, status
+from rest_framework import status
 from .authentication import JWTAuthentication
 from django.http import JsonResponse
-from .models import BlacklistedAccessToken, BlackListedRefreshToken
+from .models import BlackListedAccessToken, BlackListedRefreshToken
 from .serializers import RegisterUserSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import get_user_model
+from bson.objectid import ObjectId
 from django.conf import settings
+from django.utils import timezone
+from .models import User
+
 
 
 @api_view(['POST'])
@@ -39,9 +40,19 @@ def logout_view(request):
         return Response({"Message": "Invalid access token"}, status=status.HTTP_400_BAD_REQUEST)
         
     try:
-        BlacklistedAccessToken.objects.create(token=access_token)
+        blacklist_access_token = BlackListedAccessToken(
+            token=access_token,
+            exp_time=timezone.now()
+        )
+        blacklist_access_token.save()
+        
         refresh_token = request.POST['refresh']
-        BlackListedRefreshToken.objects.create(token=refresh_token)
+        blacklist_refresh_token = BlackListedRefreshToken(
+            token=refresh_token,
+            exp_time=timezone.now()
+        )
+        blacklist_refresh_token.save()
+
     except Exception as e:
         print("Exception:", e)
         return Response({"Message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
@@ -61,8 +72,7 @@ def register_user(request):
 
 def get_user_from_token(access_token):
     payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])
-    User = get_user_model()
-    user = User.objects.filter(id=payload['user_id']).first()
+    user = User.objects.get({'_id': ObjectId(payload['user_id'])})
     return user
     
 

@@ -61,6 +61,7 @@ local_settings.py
 db.sqlite3
 mydatabase
 db.sqlite3-journal
+YTapi/settings.py
 
 # Flask stuff:
 instance/

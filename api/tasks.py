@@ -1,6 +1,8 @@
 from celery import shared_task
 from django.conf import settings
+from django.utils import timezone
 from .models import UserQuery, SearchQuery, YTVideo
+from .serializers import VideoSerializer
 from datetime import datetime
 import requests
 
@@ -24,36 +26,45 @@ def fetch_videos():
         results = r['items']
         video_objs = []
         for result in results:
-            video_id = result['id']['videoId']
-            publish_time = datetime.strptime(result['snippet']['publishTime'], '%Y-%m-%dT%H:%M:%SZ')
-            channel_title = result['snippet']['channelTitle']
-            video_title = result['snippet']['title']
-            video_description = result['snippet']['description']
+            video_data = {}
+            video_data['video_id'] = result['id']['videoId']
+            video_data['publish_time'] = datetime.strptime(result['snippet']['publishTime'], '%Y-%m-%dT%H:%M:%SZ')
+            video_data['channel_title'] = result['snippet']['channelTitle']
+            video_data['channel_id'] = result['snippet']['channelId']
+            video_data['video_title'] = result['snippet']['title']
+            video_data['video_description'] = result['snippet']['description']
             
-            videos = YTVideo.objects.filter(video_id=video_id)
-            if not videos.exists():
-                video_obj = YTVideo(
-                    video_id=video_id,
-                    publish_time=publish_time,
-                    channel_title=channel_title,
-                    video_title=video_title,
-                    video_description=video_description 
-                    )
-                video_objs.append(video_obj)
-                video_obj.save()
+            if YTVideo.objects.raw({'video_id': video_data['video_id']}).count()==0:
+                serializer = VideoSerializer(data=video_data)
+                if serializer.is_valid():
+                    video = serializer.save()
+                    video_objs.append(video)
+                else:
+                    print(serializer.errors)
             else:
-                video_objs.append(videos.first())
-        
-        search_list = SearchQuery.objects.filter(query=query.query)
-        search_query_obj = None
-        if search_list.exists():
-            search_query_obj = search_list.first()
-            search_query_obj.video.clear()
+                video = YTVideo.objects.get({'video_id': video_data['video_id']})
+                serializer = VideoSerializer(video, data=video_data)
+                if serializer.is_valid():
+                    video = serializer.save()
+                    video_objs.append(video)
+                else:
+                    print(serializer.errors)
+                    
+        search_queries = SearchQuery.objects.raw({'query': query.query})
+        if search_queries.count()==0:
+            search_query = SearchQuery(
+                query = query.query,
+                time_created = timezone.now(),
+                time_updated = timezone.now(),
+                videos = video_objs
+            )
+            search_query.save()
         else:
-            search_query_obj = SearchQuery(query=query.query)
-            search_query_obj.save()
-        for video in video_objs:
-            search_query_obj.video.add(video)
+            search_query = search_queries.first()
+            search_query.time_updated = timezone.now()
+            search_query.videos = video_objs
+            search_query.save()
+            
         
 
 

@@ -1,6 +1,6 @@
 from django.http.response import JsonResponse
 from django.conf import settings
-from .models import BlackListedRefreshToken, BlacklistedAccessToken
+from .models import BlackListedRefreshToken, BlackListedAccessToken
 import jwt
 
 
@@ -20,8 +20,7 @@ class JWTAuthenticationMiddleware:
         
         try:
             refresh_token = request.POST['refresh']
-            blacklist_query = BlackListedRefreshToken.objects.filter(token=refresh_token)
-            if blacklist_query.exists():
+            if BlackListedRefreshToken.objects.raw({'token': refresh_token}).count()>0:
                 return JsonResponse({'Message': 'Access denied'}, status=403, safe=False)
         except:
             pass
@@ -37,8 +36,7 @@ class JWTAuthenticationMiddleware:
                 return JsonResponse({'Message': 'Authorization header not present'}, status=403, safe=False)
             try:
                 access_token = authorization_header.split(' ')[1]
-                tokens = BlacklistedAccessToken.objects.filter(token = access_token)
-                if tokens.exists():
+                if BlackListedAccessToken.objects.raw({'token': access_token}).count()>0:
                     print("Token exists")
                     return JsonResponse({'Message': 'Login required'}, status=403, safe=False)
                 payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])

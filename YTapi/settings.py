@@ -163,4 +163,12 @@ CELERY_MONGODB_BACKEND_SETTINGS = {
     "database": "YTDB",
 }
 
+AUTHORIZED_URLS = [
+    'api/',
+    'auth/logout/',
+    'auth/update/',
+    'auth/change_password/',
+    'auth/delete_user/'
+]
+
 connect("mongodb://localhost:27017/YTDB")

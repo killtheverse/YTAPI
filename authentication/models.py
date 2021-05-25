@@ -16,6 +16,7 @@ class User(MongoModel):
     last_login = fields.DateTimeField()
 
     class Meta:
+        final = True
         indexes = [
             IndexModel([('username', ASCENDING)], unique=True),
         ]
@@ -26,6 +27,7 @@ class BlackListedAccessToken(MongoModel):
     exp_time = fields.DateTimeField()
 
     class Meta:
+        final = True
         indexes = [
             IndexModel([('token', ASCENDING)], unique=True),
             IndexModel([('exp_time', ASCENDING)], expireAfterSeconds=330),
@@ -37,6 +39,7 @@ class BlackListedRefreshToken(MongoModel):
     exp_time = fields.DateTimeField()
 
     class Meta:
+        final = True
         indexes = [
             IndexModel([('token', ASCENDING)], unique=True),
             IndexModel([('exp_time', ASCENDING)], expireAfterSeconds=864030),

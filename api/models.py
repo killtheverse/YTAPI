@@ -13,6 +13,9 @@ class YTVideo(MongoModel):
     time_created = fields.DateTimeField()
     time_updated = fields.DateTimeField() 
 
+    class Meta:
+        final = True
+
 
 
 class SearchQuery(MongoModel):
@@ -22,6 +25,7 @@ class SearchQuery(MongoModel):
     time_updated = fields.DateTimeField()
 
     class Meta:
+        final = True
         indexes = [
             IndexModel([('query', ASCENDING)], unique=True)
         ]
@@ -33,6 +37,7 @@ class UserQuery(MongoModel):
     time_created = fields.DateTimeField()
 
     class Meta:
+        final = True
         indexes = [
             IndexModel([('user', ASCENDING)]),
             IndexModel([('user', ASCENDING), ('query', ASCENDING)]),

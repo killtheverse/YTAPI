@@ -12,13 +12,7 @@ from django.conf import settings
 from django.utils import timezone
 from .models import User
 from api.models import UserQuery
-import jwt
-
-
-def get_user_from_token(access_token):
-    payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])
-    user = User.objects.get({'_id': ObjectId(payload['user_id'])})
-    return user
+from .utils import get_user_from_token
 
 
 @api_view(['POST'])
@@ -52,7 +46,7 @@ def login_view(request):
     password = request.POST['password']
     user = JWTAuthentication.authenticate(request, username=username, password=password)
     if user == None:
-        return Response({"Message": "Invalid credentials"}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"message": "Invalid credentials"}, status=status.HTTP_403_FORBIDDEN)
     user.last_login = datetime.now()
     user.save()
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -76,11 +70,11 @@ def logout_view(request):
     # extract the access token from header
     authorization_header = request.headers.get('Authorization')
     if not authorization_header:
-        return JsonResponse({'Message': 'Authorization header not present'}, status=403, safe=False)
+        return JsonResponse({'message': 'Authorization header not present'}, status=403, safe=False)
     try:
         access_token = authorization_header.split(' ')[1]
     except:
-        return Response({"Message": "Invalid access token"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Invalid access token"}, status=status.HTTP_400_BAD_REQUEST)
 
 
     # Blacklist access and refresh token
@@ -99,8 +93,8 @@ def logout_view(request):
         blacklist_refresh_token.save()
 
     except:
-        return Response({"Message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"Message": "Logged out"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"message": "Logged out"}, status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])
@@ -192,12 +186,13 @@ def change_password(request):
     authorization_header = request.headers.get('Authorization')
     access_token = authorization_header.split(' ')[1]
     user = get_user_from_token(access_token)
-    
+    context = {"access_token": access_token}
+
     # change the password or return errors
-    serializer = ChangePasswordSerializer(user, data=request.data)
+    serializer = ChangePasswordSerializer(user, data=request.data, context=context)
     if serializer.is_valid():
         serializer.save()
-        return Response({"Message": "Changed password"}, status=status.HTTP_200_OK)
+        return Response({"message": "Changed password"}, status=status.HTTP_200_OK)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -248,5 +243,5 @@ def delete_user(request):
         blacklist_refresh_token.save()
 
     except:
-        return Response({"Message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"Message": "User deleted"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"message": "User deleted"}, status=status.HTTP_204_NO_CONTENT)

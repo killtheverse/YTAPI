@@ -121,6 +121,10 @@ def get_query_results(request):
     data['number'] = number
     try:
         search_query_videos = search_query.videos
+        num_videos = len(search_query_videos)
+        if number > num_videos:
+            data['message'] = f"Only {num_videos} video(s) found for this query"
+            number = num_videos
         video_ids = [video._id for video in search_query_videos]
         video_list = list(YTVideo.objects.raw({'_id': {'$in': video_ids}}).order_by([('publish_time', DESCENDING)]).limit(number))
         serializer = VideoSerializer(video_list, many=True)

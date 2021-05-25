@@ -1,11 +1,11 @@
-from os import write
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
 from cryptography.fernet import Fernet
 from django.conf import settings
 from django.utils import timezone
-
+from .validators import CustomPasswordValidator, CustomUsernameValidator
+from .utils import get_user_from_token
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
@@ -27,9 +27,7 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         username = attrs.get('username', None)
 
-        if len(username) == 0:
-            raise serializers.ValidationError({"username": "Enter valid username"})
-        elif len(username) > 100:
+        if len(username) > 100:
             raise serializers.ValidationError({"username": "username too long (max length = 100)"})
 
         return {
@@ -48,6 +46,14 @@ class RegisterUserSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         
+        error = CustomPasswordValidator().validate(attrs['password'])
+        if error != None:
+            raise serializers.ValidationError({'password': error})
+
+        error = CustomUsernameValidator().validate(attrs['username'])
+        if error != None:
+            raise serializers.ValidationError({'username': error})
+
         if User.objects.raw({'email': attrs['email']}).count()>0:
             raise serializers.ValidationError({"email": "Email is already associated with an account"})
         
@@ -88,6 +94,10 @@ class UpdateUserSerializer(serializers.Serializer):
             if User.objects.raw({'email': attrs['email']}).count()>0:
                 raise serializers.ValidationError({"email": "Email is already associated with an account"})
         if attrs.get('username', None) != None:
+            error = CustomUsernameValidator().validate(attrs['username'])
+            if error != None:
+                raise serializers.ValidationError({'username': error})
+                
             if User.objects.raw({'username': attrs['username']}).count()>0:
                 raise serializers.ValidationError({"username": "Username is already associated with an account"})
         
@@ -117,6 +127,19 @@ class ChangePasswordSerializer(serializers.Serializer):
     new_password2 = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
+        
+        access_token = self.context.get('access_token')
+        user = get_user_from_token(access_token)
+        fernet = Fernet(settings.PASSWORD_ENCRYPTION_KEY)
+        password_bytes = bytes(user.password, "utf-8")
+        decrypted_password = fernet.decrypt(password_bytes).decode()
+        if decrypted_password != attrs['old_password']:
+            raise serializers.ValidationError({"old_password": "Incorrect password"})
+
+        error = CustomPasswordValidator().validate(attrs['new_password1'])
+        if error != None:
+            raise serializers.ValidationError({"new_password1": error})
+
         if attrs['new_password1'] != attrs['new_password2']:
             raise serializers.ValidationError({"new_password2": "Passwords don't match"})
         

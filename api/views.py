@@ -8,7 +8,7 @@ from .models import (
 )
 from .serializers import VideoSerializer
 from django.utils import timezone
-from authentication.views import get_user_from_token
+from authentication.utils import get_user_from_token
 from .tasks import fetch_single_video
 from bson import ObjectId
 

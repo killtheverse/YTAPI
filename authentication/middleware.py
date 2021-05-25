@@ -1,7 +1,7 @@
 from django.http.response import JsonResponse
 from django.conf import settings
 from .models import BlackListedRefreshToken, BlackListedAccessToken
-from .views import get_user_from_token
+from .utils import get_user_from_token
 from django.conf import settings
 import jwt
 

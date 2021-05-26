@@ -14,6 +14,10 @@ from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
 from pymodm.connection import connect
+import environ
+
+env = environ.Env()
+environ.Env.read_env()
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -24,8 +28,9 @@ BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'bj+ql+lnb&3=!n9g(yp7-^=y4j+g9!bmd@6gx()$dh6bln(zcu'
-PASSWORD_ENCRYPTION_KEY = b'NakLh7WWph5NS1-xdisBuGbhux20Hv7AQJ7aRMGzIPA='
+
+SECRET_KEY = env("SECRET_KEY")
+PASSWORD_ENCRYPTION_KEY = bytes(env("PASSWORD_ENCRYPTION_KEY"), 'utf-8')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -44,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     'rest_framework',
+    'django_celery_results',
     
     'authentication',
     'api',
@@ -87,8 +93,8 @@ WSGI_APPLICATION = 'YTapi.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'djongo',
-        'NAME': 'YTDB',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': env('DATABASE_NAME'),
     }
 }
 
@@ -146,29 +152,33 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': '_id',
 }
 
-YOUTUBE_API_KEY = "AIzaSyA4hrDxm1hMLQmpyxz3KCm6i13UgWWfjGE"
+YOUTUBE_API_KEY = env("YOUTUBE_API_KEY")
 
 
-CELERY_BROKER_URL = 'amqp://localhost'
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
+
 CELERY_BEAT_SCHEDULE  = {
     'fetch_videos_every_minute': {
         'task': 'fetch_videos',
-        'schedule': crontab('*/5'),
+        'schedule': crontab(),
     }
 }
-CELERY_RESULT_BACKEND = "mongodb"
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
+CELERY_CACHE_BACKEND = env('CELERY_CACHE_BACKEND')
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
 CELERY_MONGODB_BACKEND_SETTINGS = {
-    "host": "127.0.0.1",
-    "port": 27017,
-    "database": "YTDB",
+    "host": env('MONGODB_HOST'),
+    "port": env('MONGODB_PORT'),
+    "database": env('MONGODB_DATABASE'),
 }
 
 AUTHORIZED_URLS = [
     'api/',
     'auth/logout/',
-    'auth/update/',
     'auth/change_password/',
-    'auth/delete_user/'
+    'auth/user/'
 ]
 
 connect("mongodb://localhost:27017/YTDB")

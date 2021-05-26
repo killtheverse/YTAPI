@@ -1,9 +1,11 @@
 from django.http.response import JsonResponse
 from django.conf import settings
+from rest_framework.response import Response
 from .models import BlackListedRefreshToken, BlackListedAccessToken
 from .utils import get_user_from_token
 from django.conf import settings
 import jwt
+import json
 
 
 class JWTAuthenticationMiddleware:
@@ -15,9 +17,10 @@ class JWTAuthenticationMiddleware:
         path = request.path_info.lstrip('/')
         
         try:
-            refresh_token = request.POST['refresh']
-            if BlackListedRefreshToken.objects.raw({'token': refresh_token}).count()>0:
-                return JsonResponse({'message': 'Access denied'}, status=403, safe=False)
+            json_request = json.loads(request.body)
+            refresh_token = json_request.get('refresh')
+            BlackListedRefreshToken.objects.get({'token': refresh_token})
+            return JsonResponse({"message": "Access denied"}, status=403, safe=False)
         except:
             pass
 
@@ -33,9 +36,12 @@ class JWTAuthenticationMiddleware:
             try:
                 access_token = authorization_header.split(' ')[1]
                 user = get_user_from_token(access_token)
-                if BlackListedAccessToken.objects.raw({'token': access_token}).count()>0:
-                    print("Token exists")
+                
+                try:
+                    BlackListedAccessToken.objects.get({'token': access_token})
                     return JsonResponse({'message': 'Login required'}, status=403, safe=False)
+                except:
+                    pass
                 payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])
             
             except jwt.ExpiredSignatureError:

@@ -1,5 +1,5 @@
+from api.models import SearchQuery
 from datetime import datetime
-from authentication.serializers import LoginSerializer
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -11,8 +11,76 @@ from bson.objectid import ObjectId
 from django.conf import settings
 from django.utils import timezone
 from .models import User
-from api.models import UserQuery
 from .utils import get_user_from_token
+from rest_framework_simplejwt.tokens import RefreshToken
+
+
+@api_view(['PATCH', 'DELETE'])
+def user_view(request, username):
+    '''
+    Update or delete user
+    '''
+    
+    if request.method == "PATCH":
+
+        try:
+            user = User.objects.get({"username": username})
+        except:
+            return Response({"message": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        
+        authorization_header = request.headers.get("Authorization")
+        access_token = authorization_header.split(" ")[1]
+        if user != get_user_from_token(access_token):
+            return Response({"message": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        # update the user data or return error
+        serializer = UpdateUserSerializer(user, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == "DELETE":
+        
+        try:
+            user = User.objects.get({"username": username})
+        except:
+            return Response({"message": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+        authorization_header = request.headers.get("Authorization")
+        access_token = authorization_header.split(" ")[1]
+        if user != get_user_from_token(access_token):
+            return Response({"message": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        search_queries = SearchQuery.objects.raw({"users": user._id})
+        for query in search_queries:
+            query.users.remove(user)
+            query.save()
+        
+        # delete the user 
+        user.delete()
+        
+        # blacklist the current access and refresh token
+        try:
+            blacklist_access_token = BlackListedAccessToken(
+                token=access_token,
+                exp_time=timezone.now()
+            )
+            blacklist_access_token.save()
+            
+            refresh_token = request.data.get("refresh")
+            blacklist_refresh_token = BlackListedRefreshToken(
+                token=refresh_token,
+                exp_time=timezone.now()
+            )
+            blacklist_refresh_token.save()
+
+        except:
+            return Response({"message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "User deleted"}, status=status.HTTP_204_NO_CONTENT)
+
+    
 
 
 @api_view(['POST'])
@@ -34,22 +102,23 @@ def login_view(request):
         - Returns the error
     '''
 
-    # validate the data and generate token
-    serializer = LoginSerializer(data=request.data)
-    if serializer.is_valid():
-        pass
-    else:
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    username = request.data.get("username", None)
+    password = request.data.get("password", None)
+    
+    if username == None or password == None:
+        return Response({"message": "Credentials not provided"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # authenticate user
-    username = request.POST['username']
-    password = request.POST['password']
     user = JWTAuthentication.authenticate(request, username=username, password=password)
     if user == None:
         return Response({"message": "Invalid credentials"}, status=status.HTTP_403_FORBIDDEN)
     user.last_login = datetime.now()
     user.save()
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    token = RefreshToken.for_user(user)
+
+    return Response({
+        "access": str(token.access_token),
+        "refresh": str(token)
+    }, status=status.HTTP_200_OK)
     
 
 @api_view(['POST'])
@@ -68,14 +137,8 @@ def logout_view(request):
     '''
 
     # extract the access token from header
-    authorization_header = request.headers.get('Authorization')
-    if not authorization_header:
-        return JsonResponse({'message': 'Authorization header not present'}, status=403, safe=False)
-    try:
-        access_token = authorization_header.split(' ')[1]
-    except:
-        return Response({"message": "Invalid access token"}, status=status.HTTP_400_BAD_REQUEST)
-
+    authorization_header = request.headers.get("Authorization")
+    access_token = authorization_header.split(' ')[1]
 
     # Blacklist access and refresh token
     try:
@@ -85,14 +148,15 @@ def logout_view(request):
         )
         blacklist_access_token.save()
         
-        refresh_token = request.POST['refresh']
+        refresh_token = request.data.get("refresh")
         blacklist_refresh_token = BlackListedRefreshToken(
             token=refresh_token,
             exp_time=timezone.now()
         )
         blacklist_refresh_token.save()
 
-    except:
+    except Exception as e:
+        print(e)
         return Response({"message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"message": "Logged out"}, status=status.HTTP_204_NO_CONTENT)
 
@@ -100,7 +164,7 @@ def logout_view(request):
 @api_view(['POST'])
 def register_user(request):
     '''
-    View which registers a user. Does not require authentication
+    Register a user. Does not require authentication
 
     Request parameters(all required):
     - username
@@ -130,42 +194,6 @@ def register_user(request):
 
 
 @api_view(['POST'])
-def update_user(request):
-    '''
-    View which updates user information. Required authentication
-
-    Request parameters(Only provide those fields which need to be updated)
-    - username
-    - first_name
-    - last_name
-    - email
-
-    Response
-    - On success, post update fields of:
-        - username
-        - first_name
-        - last_name
-        - email
-
-    - On failure
-        - Returns the error
-    '''
-
-    # extract the access token from header and get the user
-    authorization_header = request.headers.get('Authorization')
-    access_token = authorization_header.split(' ')[1]
-    user = get_user_from_token(access_token)
-    
-    # update the user data or return error
-    serializer = UpdateUserSerializer(user, data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    else:
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['POST'])
 def change_password(request):
     '''
     View which changes the password of the user
@@ -183,8 +211,8 @@ def change_password(request):
     '''
 
     # extract access token from header and get user
-    authorization_header = request.headers.get('Authorization')
-    access_token = authorization_header.split(' ')[1]
+    authorization_header = request.headers.get("Authorization")
+    access_token = authorization_header.split(" ")[1]
     user = get_user_from_token(access_token)
     context = {"access_token": access_token}
 
@@ -196,52 +224,3 @@ def change_password(request):
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-@api_view(['POST'])
-def delete_user(request):
-    '''
-    View which deletes the user account. Requires authentication
-    
-    Request parameters
-    - refresh: refresh token associated with the current user session(Required)
-
-    Response
-    - On success:
-        - returns a message that user has been removed
-    - On failure:
-        - returns the error
-    '''
-
-    # extract access token from the header and get user
-    authorization_header = request.headers.get('Authorization')
-    access_token = authorization_header.split(' ')[1]
-    user = get_user_from_token(access_token)
-
-    # delete every query associated with the user
-    user_obj_id = ObjectId(user._id)
-    if UserQuery.objects.raw({'user': user_obj_id}).count()>0:
-        user_queries = UserQuery.objects.raw({'user': user_obj_id})
-        for query in user_queries:
-            query.delete()
-
-    # delete the user 
-    user.delete()
-    
-    # blacklist the current access and refresh token
-    try:
-        blacklist_access_token = BlackListedAccessToken(
-            token=access_token,
-            exp_time=timezone.now()
-        )
-        blacklist_access_token.save()
-        
-        refresh_token = request.POST['refresh']
-        blacklist_refresh_token = BlackListedRefreshToken(
-            token=refresh_token,
-            exp_time=timezone.now()
-        )
-        blacklist_refresh_token.save()
-
-    except:
-        return Response({"message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"message": "User deleted"}, status=status.HTTP_204_NO_CONTENT)

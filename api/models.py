@@ -20,7 +20,9 @@ class YTVideo(MongoModel):
 
 class SearchQuery(MongoModel):
     query = fields.CharField(max_length=100)
-    videos = fields.ListField(field=fields.ReferenceField(YTVideo, on_delete=fields.ReferenceField.CASCADE))
+    slug = fields.CharField(max_length=200)
+    users = fields.ListField(field=fields.ReferenceField(User, on_delete=fields.ReferenceField.DO_NOTHING), blank=True)
+    videos = fields.ListField(field=fields.ReferenceField(YTVideo, on_delete=fields.ReferenceField.DO_NOTHING), blank=True)
     time_created = fields.DateTimeField()
     time_updated = fields.DateTimeField()
 
@@ -29,19 +31,20 @@ class SearchQuery(MongoModel):
         indexes = [
             IndexModel([('query', ASCENDING)], unique=True)
         ]
+    
 
     
-class UserQuery(MongoModel):
-    user = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE)
-    query = fields.CharField(max_length=100)
-    time_created = fields.DateTimeField()
+# class UserQuery(MongoModel):
+#     user = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE)
+#     query = fields.ReferenceField(YTVideo, on_delete=fields.ReferenceField.CASCADE)
+#     time_created = fields.DateTimeField()
 
-    class Meta:
-        final = True
-        indexes = [
-            IndexModel([('user', ASCENDING)]),
-            IndexModel([('user', ASCENDING), ('query', ASCENDING)]),
-        ]
+#     class Meta:
+#         final = True
+#         indexes = [
+#             IndexModel([('user', ASCENDING)]),
+#             IndexModel([('user', ASCENDING), ('user', ASCENDING)]),
+#         ]
 
 
     

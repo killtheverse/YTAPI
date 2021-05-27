@@ -20,7 +20,7 @@ class JWTAuthenticationMiddleware:
             json_request = json.loads(request.body)
             refresh_token = json_request.get('refresh')
             BlackListedRefreshToken.objects.get({'token': refresh_token})
-            return JsonResponse({"message": "Access denied"}, status=403, safe=False)
+            return JsonResponse({"message": "Login required"}, status=401, safe=False)
         except:
             pass
 
@@ -32,14 +32,14 @@ class JWTAuthenticationMiddleware:
         if login_required == True:
             authorization_header = request.headers.get('Authorization')
             if not authorization_header:
-                return JsonResponse({'message': 'Authorization header not present'}, status=403, safe=False)
+                return JsonResponse({'message': 'Authorization header not present'}, status=401, safe=False)
             try:
                 access_token = authorization_header.split(' ')[1]
                 user = get_user_from_token(access_token)
                 
                 try:
                     BlackListedAccessToken.objects.get({'token': access_token})
-                    return JsonResponse({'message': 'Login required'}, status=403, safe=False)
+                    return JsonResponse({'message': 'Login required'}, status=401, safe=False)
                 except:
                     pass
                 payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=['HS256'])

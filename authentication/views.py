@@ -4,11 +4,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .authentication import JWTAuthentication
-from django.http import JsonResponse
 from .models import BlackListedAccessToken, BlackListedRefreshToken
 from .serializers import RegisterUserSerializer, UpdateUserSerializer, ChangePasswordSerializer
-from bson.objectid import ObjectId
-from django.conf import settings
 from django.utils import timezone
 from .models import User
 from .utils import get_user_from_token
@@ -18,7 +15,35 @@ from rest_framework_simplejwt.tokens import RefreshToken
 @api_view(['PATCH', 'DELETE'])
 def user_view(request, username):
     '''
-    Update or delete user
+    Update or delete user. Requires authentication.
+    
+    if method == PATCH:
+
+        Request parameters(atleast 1 required):
+        - username: new username
+        - email: new email
+        - first_name: new first name
+        - last_name: new last name
+
+        Response:
+        - On success:
+            - username: new username
+            - email: new email
+            - first_name: new first name
+            - last_name: new last name
+        - On failure:
+            - errors 
+    
+    elif method == DELETE:
+
+        Request parameters:
+        None
+
+        Response:
+        - On success:
+            - message: message that user has been deleted
+        - On failure:
+            - message: error message
     '''
     
     if request.method == "PATCH":
@@ -78,7 +103,7 @@ def user_view(request, username):
 
         except:
             return Response({"message": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"message": "User deleted"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "User deleted"}, status=status.HTTP_200_OK)
 
     
 
@@ -110,12 +135,13 @@ def login_view(request):
 
     user = JWTAuthentication.authenticate(request, username=username, password=password)
     if user == None:
-        return Response({"message": "Invalid credentials"}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"message": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
     user.last_login = datetime.now()
     user.save()
     token = RefreshToken.for_user(user)
 
     return Response({
+        "username": user.username,
         "access": str(token.access_token),
         "refresh": str(token)
     }, status=status.HTTP_200_OK)
@@ -124,16 +150,16 @@ def login_view(request):
 @api_view(['POST'])
 def logout_view(request):
     '''
-    View which logs out the user which is currently logged in. Requires authentication.
+    Logs out the current user. Requires authentication.
 
     Request parameters:
     - refresh: The refresh token associated with the current user session(Required)
 
     Response:
     - On success:
-        - Returns a message that user has logged out
+        - message: message that user has logged out
     - On failure:
-        - Returns the error
+        - message: error message
     '''
 
     # extract the access token from header
@@ -182,7 +208,7 @@ def register_user(request):
         - last name: last name of the user registered
     
     - On failure:
-        - Returns the error
+        - message: error message
     '''
 
     serializer = RegisterUserSerializer(data=request.data)
@@ -196,7 +222,7 @@ def register_user(request):
 @api_view(['POST'])
 def change_password(request):
     '''
-    View which changes the password of the user
+    Changes the password of the user. Requires authentication
 
     Request parameters(all required)
     - old_password: current password of the user
@@ -205,9 +231,9 @@ def change_password(request):
 
     Returns
     - On success
-        - Returns a message that the new password has been changed
+        - message: message that the new password has been changed
     - On failure
-        - Returns the error
+        - messaeg: error message
     '''
 
     # extract access token from header and get user

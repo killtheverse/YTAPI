@@ -1,3 +1,4 @@
+from enum import unique
 from pymodm import MongoModel, fields
 from authentication.models import User
 from pymongo import IndexModel, ASCENDING
@@ -29,7 +30,8 @@ class SearchQuery(MongoModel):
     class Meta:
         final = True
         indexes = [
-            IndexModel([('query', ASCENDING)], unique=True)
+            IndexModel([('query', ASCENDING)], unique=True),
+            IndexModel([('slug', ASCENDING)], unique=True)
         ]
     
 

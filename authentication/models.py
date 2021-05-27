@@ -30,7 +30,7 @@ class BlackListedAccessToken(MongoModel):
         final = True
         indexes = [
             IndexModel([('token', ASCENDING)], unique=True),
-            IndexModel([('exp_time', ASCENDING)], expireAfterSeconds=330),
+            IndexModel([('exp_time', ASCENDING)], expireAfterSeconds=630),
         ]
 
 

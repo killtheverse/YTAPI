@@ -270,6 +270,7 @@ def bulk_register(request):
             present_query_list.append(present_query.query)
             if user not in present_query.users:
                 present_query.users.append(user)
+                present_query.save()
             if present_query.time_updated < datetime.now() - timedelta(hours=1):
                 update_queries.append(present_query.query)
         
@@ -372,6 +373,8 @@ def bulk_fetch(request):
                 "videos": serializer.data,
             } 
             data["data"].append(query_obj)
+        if len(data["data"]) == 0:
+            data["message"] = "Register the queries before fetching"
         return Response(data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)

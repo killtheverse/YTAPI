@@ -1,4 +1,4 @@
-from api.models import SearchQuery
+from api.models import SearchQuery, UserQuery
 from datetime import datetime
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -78,10 +78,10 @@ def user_view(request, username):
         if user != get_user_from_token(access_token):
             return Response({"message": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
 
-        search_queries = SearchQuery.objects.raw({"users": user._id})
-        for query in search_queries:
-            query.users.remove(user)
-            query.save()
+        # search_queries = SearchQuery.objects.raw({"users": user._id})
+        # for query in search_queries:
+        #     query.users.remove(user)
+        #     query.save()
         
         # delete the user 
         user.delete()

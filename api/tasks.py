@@ -28,11 +28,14 @@ def fetch_single_video(query):
     }
     
     r = requests.get(search_url, params=params).json()
+
+
     video_keys = []
     video_data = {}
     for result in  r["items"]:
         video_keys.append(result["id"]["videoId"])
         video_data[result["id"]["videoId"]] = {
+            "video_id": result["id"]["videoId"],
             "publish_time": datetime.strptime(result["snippet"]["publishTime"], "%Y-%m-%dT%H:%M:%SZ"),
             "channel_title": result["snippet"]["channelTitle"],
             "channel_id": result["snippet"]["channelId"],
@@ -40,11 +43,26 @@ def fetch_single_video(query):
             "video_description": result["snippet"]["description"]
         }
 
+
+    # delete old videos in bulk
+    
+    # old_video_ids = []
+    # for video in search_query.videos:
+    #     print(video)
+    #     if video.video_id not in video_keys:
+    #         old_video_ids.append(video._id)
+    
+    # print(old_video_ids)
+    # deleted = YTVideo.objects.raw({'_id': {"$in": old_video_ids}})
+    # print(deleted.count())
+    # number = deleted.delete()
+    # print(number)
+
     video_objs = []    
-    existing_videos = YTVideo.objects.raw({"_id": {"$in": video_keys}})
+    existing_videos = YTVideo.objects.raw({"video_id": {"$in": video_keys}})
     existing_video_ids = []
     for existing_video in existing_videos:
-        existing_video_ids.append(existing_video._id)
+        existing_video_ids.append(existing_video.video_id)
         serializer = VideoSerializer(existing_video, video_data[existing_video.video_id])
         if serializer.is_valid():
             video_obj = serializer.save()
@@ -67,12 +85,12 @@ def fetch_single_video(query):
             time_updated = timezone.now(),
         )
         new_videos.append(new_video_obj)
-    
-    new_videos = YTVideo.objects.bulk_create(new_videos)
+
+    if len(new_videos) > 0:
+        new_videos = YTVideo.objects.bulk_create(new_videos)
 
     video_objs.extend(new_videos)
     search_query = SearchQuery.objects.get({'query': query})
     search_query.videos = video_objs
     search_query.time_updated = timezone.now()
     search_query.save()
-

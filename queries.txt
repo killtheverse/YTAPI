@@ -32,8 +32,6 @@ qs = SearchQuery.objects.aggregate(
         )
 
 
-Create queries in bulk:
-new_queries = SearchQuery.objects.bulk_create(new_queries)
 
 
 Create videos in bulk:

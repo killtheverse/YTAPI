@@ -1,0 +1,57 @@
+version: "3.7"
+
+services:
+  django:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000 
+    volumes: 
+      - ./:/YTAPI/
+    ports: 
+      - 8000:8000
+    
+    env_file: 
+      - ./YTapi/.env
+    
+    depends_on: 
+      - mongodb
+      - redis
+
+  mongodb:
+    image: mongo
+    volumes: 
+      - mongodb-data:/data/db
+    ports: 
+      - 27017:27017
+
+
+  celery:
+    build: .
+    command: ['celery', '-A', 'YTapi', 'worker', '-l', 'INFO']
+    volumes:
+      - celery-data:/data/celery-data/
+    
+    depends_on: 
+      - django
+      - redis
+      - mongodb
+    
+      
+  celery-beat:
+    build: .
+    command: ['celery', '-A', 'YTapi', 'beat', '-l', 'INFO']
+    volumes:
+      - celery-data:/data/celery-data/
+    
+    depends_on: 
+      - django
+      - redis
+      - mongodb
+    
+  
+  redis:
+    image: "redis:alpine"
+
+
+volumes: 
+  mongodb-data:
+  celery-data:

@@ -5,7 +5,7 @@ services:
     build: .
     command: python manage.py runserver 0.0.0.0:8000 
     volumes: 
-      - ./:/YTAPI/
+      - .:/usr/src/YTAPI/
     ports: 
       - 8000:8000
     
@@ -19,7 +19,7 @@ services:
   mongodb:
     image: mongo
     volumes: 
-      - mongodb-data:/data/db
+      - mongodb-data:/usr/src/mongodb-data/
     ports: 
       - 27017:27017
 
@@ -28,7 +28,7 @@ services:
     build: .
     command: ['celery', '-A', 'YTapi', 'worker', '-l', 'INFO']
     volumes:
-      - celery-data:/data/celery-data/
+      - celery-data:/usr/src/celery-data/
     
     depends_on: 
       - django
@@ -40,7 +40,7 @@ services:
     build: .
     command: ['celery', '-A', 'YTapi', 'beat', '-l', 'INFO']
     volumes:
-      - celery-data:/data/celery-data/
+      - celery-data:/usr/src/celery-data/
     
     depends_on: 
       - django

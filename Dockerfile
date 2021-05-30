@@ -1,6 +1,6 @@
 FROM python:3.6.13
 
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-
-COPY . .    
+WORKDIR /usr/src/YTAPI
+COPY requirements.txt ./
+ADD . /usr/src/YTAPI/
+RUN pip install -r requirements.txt   

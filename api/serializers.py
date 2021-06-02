@@ -37,6 +37,9 @@ class VideoSerializer(serializers.Serializer):
             time_updated = timezone.now()
         )
         video.save()
+
+        video.indexing()
+
         return video
     
     def update(self, instance, validated_data):
@@ -44,6 +47,10 @@ class VideoSerializer(serializers.Serializer):
         instance.video_description = validated_data.get('video_description', instance.video_description)
         instance.channel_title = validated_data.get('channel_title', instance.channel_title)
         instance.time_updated = timezone.now()
+        instance.save()
+        
+        instance.indexing()
+
         return instance
 
 

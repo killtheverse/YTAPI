@@ -87,7 +87,10 @@ def fetch_single_video(query):
         new_videos.append(new_video_obj)
 
     if len(new_videos) > 0:
-        new_videos = YTVideo.objects.bulk_create(new_videos)
+        new_videos = YTVideo.objects.bulk_create(new_videos, retrieve=True)
+
+    for new_video in new_videos:
+        new_video.indexing()
 
     video_objs.extend(new_videos)
     search_query = SearchQuery.objects.get({'query': query})

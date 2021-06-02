@@ -62,6 +62,7 @@ db.sqlite3
 mydatabase
 db.sqlite3-journal
 YTapi/.env
+YTapi/docker.env
 
 # Flask stuff:
 instance/

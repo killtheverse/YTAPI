@@ -1,4 +1,4 @@
-from enum import unique
+from api.search import Video
 from pymodm import MongoModel, fields
 from authentication.models import User
 from pymongo import DESCENDING, IndexModel, ASCENDING
@@ -14,12 +14,25 @@ class YTVideo(MongoModel):
     time_created = fields.DateTimeField()
     time_updated = fields.DateTimeField() 
 
+
+    def indexing(self):
+        doc = Video(
+            meta = {"id": self.video_id},
+            title = self.video_title,
+            publish_date = self.publish_time
+        )
+        # try:
+        doc.save()
+        return doc.to_dict(include_meta=True)
+        # except Exception as e:
+        #     print(e)
+        #     return None
+
     class Meta:
         final = True
         indexed = [
             IndexModel([('video_id', ASCENDING)], unique=True)
         ]
-
 
 
 class SearchQuery(MongoModel):

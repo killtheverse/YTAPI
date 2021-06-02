@@ -1,5 +1,6 @@
 from os import stat
 import bson
+from elasticsearch_dsl.aggs import A
 from pymongo import DESCENDING
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -14,41 +15,19 @@ from authentication.utils import get_user_from_token
 from .tasks import fetch_single_video
 from .utils import slugify
 from datetime import datetime, timedelta
+from .search import Video
 
 from django.conf import settings
 from .models import YTVideo
 import requests
 
+from elasticsearch_dsl.query import Q, Range, Match
+from elasticsearch import Elasticsearch
+from elasticsearch_dsl import Search
+
 
 @api_view(['GET', 'POST'])
 def query_list(request):
-    '''
-    List all the queries of the user or create a new query. Requires authentication.
-
-    if method == GET:
-        Request parameters:
-        None
-
-        Response:
-        - On success:
-            - queries: a list of objects with keys:
-                query: query string
-                slug: slug which will be used to access the query
-        - On failure
-            - message: error message
-
-    elif method == POST:
-        Request parameters:
-        - query: query which is to be searched
-
-        Response:
-        - On success
-            - message: message that query has been stored/ it already exists
-            - query: query registered
-            - slug: slug to access the registered query
-        - On failure
-            - message: error message
-    '''
     if request.method == "GET":
         try:
             limit = int(request.query_params.get('limit', 5))
@@ -132,19 +111,10 @@ def query_list(request):
             "number": len(queries),
             "queries": queries,    
         }
-        
-        # queries = [query_obj["query"] for query_obj in data["queries"]]
-        # search_queries = SearchQuery.objects.raw({"query": {"$in": queries}})
-        # query_ids = [sq._id for sq in search_queries]
-        # UserQuery.objects.raw({"user": user_id, "query": {"$in": query_ids}}).update({
-        #     "$set": {
-        #         "last_accessed": timezone.now()},
-        #         "$inc": {"times_accessed": 1}
-        # })
 
         last_fetched = offset + data["number"]
         if last_fetched >= total_docs:
-            data["next"] = "No more queries"
+            data["next"] = None
 
         return Response(data=data, status=status.HTTP_200_OK)
 
@@ -209,42 +179,6 @@ def query_list(request):
 
 @api_view(["GET", "DELETE"])
 def query_detail(request, slug):
-    '''
-    Returns the videos associated with a query or unregisters the user for the query.
-    Requires authentication.
-    
-    if method == GET:
-        Request parameters(parameters should be present in url):
-        - limit(default 5)
-        - offset(default 0)
-
-        Response:
-        - On success:
-            - query: query that was searched
-            - limit
-            - offset
-            - videos: a list consisting of videos objects:
-                - video_id
-                - video_title
-                - video_description
-                - channel_title
-                - channel_id
-                - publish_time
-                - time_created
-                - time updated
-        - On failure:
-            - message: error message
-    
-    elif method == DELETE:
-        Request parameters
-        None
-
-        Response:
-        - On success:
-            - message: a message that query has been deleted
-        - On failure
-            - message: error message
-    '''
     if request.method == "GET":
         
         # extract access token from header and get user
@@ -409,97 +343,189 @@ def bulk_fetch(request):
         "queries": queries,    
     }
     
-    
-    # UserQuery.objects.raw({"user": user_id, "query": {"$in": query_ids}}).update({
-    #     "$set": {
-    #         "last_accessed": timezone.now()},
-    #         "$inc": {"times_accessed": 1}
-    # })
     return Response(data=data, status=status.HTTP_200_OK)
     
 
-@api_view(['POST'])
-def test(requset, query):
-    search_url = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        "part": "snippet",
-        "maxResults": 20,
-        "type": "video",
-        "order": "date",
-        "q": query,
-        "key": settings.YOUTUBE_API_KEY,
+@api_view(['GET'])
+def date_search(request):
+    try:
+        time_from = request.query_params.get("from", (datetime.now()-timedelta(days=10)))
+        time_to = request.query_params.get("to", datetime.now())
+    except:
+        return Response({"message": "Bad request"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if isinstance(time_from, str):
+        time_from_str = time_from
+        try:
+            time_from = datetime.strptime(time_from, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception as e:
+            return Response({"message": e}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        time_from_str = None
+
+    if isinstance(time_to, str):
+        time_to_str = time_to
+        try:
+            time_to = datetime.strptime(time_to, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception as e:
+            return Response({"message": e}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        time_to_str = None
+    
+    try:
+        limit = int(request.query_params.get('limit', 5))
+        offset = int(request.query_params.get('offset', 0))
+    except:
+        return Response({"message": "Invalid query parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if offset<0 or limit<1:
+        return Response({"message": "Offset should be >=0 and limit should be >=1"}, status=status.HTTP_400_BAD_REQUEST)
+
+    client = Elasticsearch([settings.ELASTIC_SEARCH_URL])
+    print(time_from, time_to)
+
+    query_body = {
+        "from": offset,
+        "size": limit,
+        "sort": [{
+            "publish_date": {"order": "desc"}
+        }],
+        "query": {
+            "range": {
+                "publish_date": {
+                    "gte": time_from,
+                    "lte": time_to,
+                }
+            }
+        }
+    }
+    s = Search(using=client, index='ytvideo', doc_type='video').from_dict(query_body)   
+    response = s.execute()
+    
+    video_ids = []
+    for hit in response:
+        video_ids.append(hit.meta.id)
+    
+    
+
+    videos = list(YTVideo.objects.raw({"video_id": {"$in": video_ids}}))
+    serializer = VideoSerializer(videos, many=True)
+
+    next = "127.0.0.1:8000/api/videos/search/date?limit="+str(limit)+"&offset="+str(limit+offset)
+    if time_from_str != None:
+        next += "&next="+time_from_str
+    if time_to_str != None:
+        next += "&to="+time_to_str
+
+    if len(video_ids) == 0:
+        next = None
+    return Response(
+        data={
+            "next": next,
+            "data": serializer.data
+        }
+    , status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def title_search(request):
+    try:
+        key = request.query_params.get("key", None)
+    except:
+        return Response({"message":"Provide a key"}, status=status.HTTP_400_BAD_REQUEST)
+    if len(key) == 0:
+        return Response({"messaeg": "Enter a valid key"}, status=status.HTTP_400_BAD_REQUEST)
+
+    
+    try:
+        limit = int(request.query_params.get('limit', 5))
+        offset = int(request.query_params.get('offset', 0))
+    except:
+        return Response({"message": "Invalid query parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if offset<0 or limit<1:
+        return Response({"message": "Offset should be >=0 and limit should be >=1"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    client = Elasticsearch([settings.ELASTIC_SEARCH_URL])
+
+
+    query_body = {
+        "from": offset,
+        "size": limit,
+        "sort": [{
+            "title.keyword": {"order": "asc"}
+        }],
+        "query": {
+            "match": {
+                "title": {
+                    "query": key,
+                }
+            }
+        }
+    }
+    s = Search(using=client, index='ytvideo', doc_type='video').from_dict(query_body)
+    
+    response = s.execute()
+    video_ids = []
+    for hit in response:
+        video_ids.append(hit.meta.id)
+    
+
+    videos = list(YTVideo.objects.raw({"video_id": {"$in": video_ids}}))
+    serializer = VideoSerializer(videos, many=True)
+
+    next = "127.0.0.1:8000/api/videos/search/title?key=" + key+"&offset="+str(offset+limit)+"&limit="+str(limit)
+    if len(video_ids) == 0:
+        next = None
+    return Response(
+        data={
+            "next": next,
+            "data": serializer.data
+        }
+    , status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def number_search(request):
+    client = Elasticsearch([settings.ELASTIC_SEARCH_URL])
+
+    query_body = {
+        "aggs": {
+            "by_number": {
+                "terms": {
+                    "field": "number",
+                    "order": {"_count": "desc"}
+                },
+                "aggs": {
+                    "top_hit_three": {
+                        "top_hits": {"size": 3}
+                    }
+                }
+            }
+        }
+    }
+
+    s = Search(using=client, index='ytvideo', doc_type='video').from_dict(query_body)
+    response = s.execute()
+    
+    data = {
+        "data": []
     }
     
-    r = requests.get(search_url, params=params).json()
-
-
-    video_keys = []
-    video_data = {}
-    for result in  r["items"]:
-        video_keys.append(result["id"]["videoId"])
-        video_data[result["id"]["videoId"]] = {
-            "video_id": result["id"]["videoId"],
-            "publish_time": datetime.strptime(result["snippet"]["publishTime"], "%Y-%m-%dT%H:%M:%SZ"),
-            "channel_title": result["snippet"]["channelTitle"],
-            "channel_id": result["snippet"]["channelId"],
-            "video_title": result["snippet"]["title"],
-            "video_description": result["snippet"]["description"]
+    for item in response.aggregations.by_number.buckets:
+        video_ids = []
+        for hit in item.top_hit_three.hits.hits:
+            video_ids.append(hit["_id"])
+        videos = list(YTVideo.objects.raw({"video_id": {"$in": video_ids}}))
+        serializer = VideoSerializer(videos, many=True)
+        bucket = {
+            "key": item.key,
+            "doc_count": item.doc_count,
+            "videos": serializer.data
         }
+        data["data"].append(bucket)
+    
+    data["buckets"] = len(data["data"])
+    return Response(data, status=status.HTTP_200_OK)
 
 
-    # delete old videos in bulk
-    
-    # old_video_ids = []
-    # for video in search_query.videos:
-    #     print(video)
-    #     if video.video_id not in video_keys:
-    #         old_video_ids.append(video._id)
-    
-    # print(old_video_ids)
-    # deleted = YTVideo.objects.raw({'_id': {"$in": old_video_ids}})
-    # print(deleted.count())
-    # number = deleted.delete()
-    # print(number)
-
-    video_objs = []    
-    existing_videos = YTVideo.objects.raw({"video_id": {"$in": video_keys}})
-    print("count:", existing_videos.count())
-    existing_video_ids = []
-    for existing_video in existing_videos:
-        existing_video_ids.append(existing_video.video_id)
-        serializer = VideoSerializer(existing_video, video_data[existing_video.video_id])
-        if serializer.is_valid():
-            video_obj = serializer.save()
-            video_objs.append(video_obj)
-        else:
-            print(serializer.errors)
-    
-    print(len(existing_video_ids))
-    
-    new_videos = []
-    for key, val in video_data.items():
-        if key in existing_video_ids:
-            continue
-        new_video_obj = YTVideo(
-            video_id = key,
-            video_title = val["video_title"],
-            video_description = val["video_description"],
-            channel_title = val["channel_title"],
-            channel_id = val["channel_id"],
-            publish_time = val["publish_time"],
-            time_created = timezone.now(),
-            time_updated = timezone.now(),
-        )
-        new_videos.append(new_video_obj)
-    
-    print("new count", len(new_videos))
-
-    if len(new_videos) > 0:
-        new_videos = YTVideo.objects.bulk_create(new_videos)
-
-    video_objs.extend(new_videos)
-    search_query = SearchQuery.objects.get({'query': query})
-    search_query.videos = video_objs
-    search_query.time_updated = timezone.now()
-    search_query.save()
-    return Response({"OK"})

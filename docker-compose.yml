@@ -3,9 +3,12 @@ version: "3.7"
 services:
   django:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000 
+    container_name: django
+    command: gunicorn --bind :8000 YTapi.wsgi 
+    
     volumes: 
       - .:/usr/src/YTAPI/
+      
     ports: 
       - 8000:8000
     
@@ -15,20 +18,22 @@ services:
     depends_on: 
       - mongodb
       - redis
+      - elasticsearch
 
   mongodb:
     image: mongo
     volumes: 
-      - mongodb-data:/usr/src/mongodb-data/
+      - mongodb-data:/usr/share/mongodb-data/
     ports: 
       - 27017:27017
 
 
   celery:
     build: .
+    container_name: celery
     command: ['celery', '-A', 'YTapi', 'worker', '-l', 'INFO']
     volumes:
-      - celery-data:/usr/src/celery-data/
+      - celery-data:/usr/share/celery-data/
     
     depends_on: 
       - django
@@ -38,9 +43,10 @@ services:
       
   celery-beat:
     build: .
+    container_name: celery-beat
     command: ['celery', '-A', 'YTapi', 'beat', '-l', 'INFO']
     volumes:
-      - celery-data:/usr/src/celery-data/
+      - celery-data:/usr/share/celery-data/
     
     depends_on: 
       - django
@@ -49,9 +55,28 @@ services:
     
   
   redis:
-    image: "redis:alpine"
+    image: redis:alpine
+    container_name: redis
 
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:5.6.16
+    container_name: elasticsearch
+    volumes:
+      - es-data:/usr/share/elasticsearch/
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      ES_JAVA_OPTS: '-Xms256m -Xmx256m'
+      network.bind_host: 0.0.0.0
+      network.host: 0.0.0.0
+      discovery.type: single-node
+      http.max_content_length: 1000mb 
+      xpack.security.enabled: 'false'
 
 volumes: 
   mongodb-data:
   celery-data:
+  es-data:
+  

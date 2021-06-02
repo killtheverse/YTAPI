@@ -15,6 +15,8 @@ from datetime import timedelta
 from celery.schedules import crontab
 from pymodm.connection import connect
 import os
+from elasticsearch_dsl.connections import connections
+
 import environ
 
 env = environ.Env()
@@ -182,4 +184,8 @@ AUTHORIZED_URLS = [
     'auth/user/'
 ]
 
+ELASTIC_SEARCH_URL = env('ELASTIC_SEARCH_URL')
+
+
 connect(env('MONGO_CONNECT'))
+connections.create_connection(hosts=[ELASTIC_SEARCH_URL], timeout=20)

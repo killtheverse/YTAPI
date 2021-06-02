@@ -1,8 +1,0 @@
-- Use PyJWT-1.7.1 instead of latest version. Latest version has a bug.
-
-- Run MongoDB server: mongod --port 27017 --dbpath /home/killtheverse/Desktop/MongoDB
-
-- Mongo creds: (rahul, password), (rahuldev, password), (admin, password)
-
-- Celery: celery -A YTapi worker -B -l INFO
-
